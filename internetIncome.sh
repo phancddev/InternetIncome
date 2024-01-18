@@ -165,16 +165,14 @@ start_containers() {
     if [ "$container_pulled" = false ]; then
       sudo docker pull xjasonlyu/tun2socks:v2.5.2
     fi
-    if CONTAINER_ID=$(sudo docker run --name tun$UNIQUE_ID$i $LOGS_PARAM --restart=always -e LOGLEVEL=$TUN_LOG_PARAM -e PROXY=$proxy -v '/dev/net/tun:/dev/net/tun' --cap-add=NET_ADMIN $combined_ports -d xjasonlyu/tun2socks:v2.5.2); then
+    if [ "$USE_SOCKS5_DNS" != true ]; then
+      EXTRA_COMMANDS='echo -e "nameserver 1.0.0.1\nnameserver 1.1.1.1" > /etc/resolv.conf;ip rule add iif lo ipproto udp dport 53 lookup main;'
+    else
+      EXTRA_COMMANDS='echo -e "nameserver 1.0.0.1\nnameserver 1.1.1.1" > /etc/resolv.conf;'
+    fi
+    if CONTAINER_ID=$(sudo docker run --name tun$UNIQUE_ID$i $LOGS_PARAM --restart=always -e LOGLEVEL=$TUN_LOG_PARAM -e PROXY=$proxy -e EXTRA_COMMANDS="$EXTRA_COMMANDS" -v '/dev/net/tun:/dev/net/tun' --cap-add=NET_ADMIN $combined_ports -d xjasonlyu/tun2socks:v2.5.2); then
       echo "$CONTAINER_ID" | tee -a $containers_file
       echo "tun$UNIQUE_ID$i" | tee -a $container_names_file
-      if [ "$USE_SOCKS5_DNS" != true ]; then
-        sudo docker exec tun$UNIQUE_ID$i sh -c 'echo "nameserver 1.1.1.1" > /etc/resolv.conf;echo "nameserver 8.8.8.8" >> /etc/resolv.conf;ip rule add iif lo ipproto udp dport 53 lookup main;'
-        sudo docker exec tun$UNIQUE_ID$i sh -c "sed -i \"\|exec tun2socks|s#.*#echo 'nameserver 1.1.1.1' > /etc/resolv.conf;echo 'nameserver 8.8.8.8' >> /etc/resolv.conf;ip rule add iif lo ipproto udp dport 53 lookup main;exec tun2socks \\\\\#\" entrypoint.sh"
-      else
-        sudo docker exec tun$UNIQUE_ID$i sh -c 'echo "nameserver 1.1.1.1" > /etc/resolv.conf;echo "nameserver 8.8.8.8" >> /etc/resolv.conf;'
-        sudo docker exec tun$UNIQUE_ID$i sh -c "sed -i \"\|exec tun2socks|s#.*#echo 'nameserver 1.1.1.1' > /etc/resolv.conf;echo 'nameserver 8.8.8.8' >> /etc/resolv.conf;exec tun2socks \\\\\#\" entrypoint.sh"
-      fi
     else
       echo -e "${RED}Failed to start container for proxy. Exiting..${NOCOLOUR}"
       exit 1
@@ -564,7 +562,7 @@ start_containers() {
     RANDOM_ID=`cat /dev/urandom | LC_ALL=C tr -dc 'a-f0-9' | dd bs=1 count=32 2>/dev/null`
     date_time=`date "+%D %T"`
     if [ "$container_pulled" = false ]; then
-      sudo docker pull --platform=linux/amd64 fazalfarhan01/earnapp:lite
+      sudo docker pull fazalfarhan01/earnapp:lite
     fi
     mkdir -p $PWD/$earnapp_data_folder/data$i
     sudo chmod -R 777 $PWD/$earnapp_data_folder/data$i
@@ -582,7 +580,7 @@ start_containers() {
       printf "$date_time https://earnapp.com/r/%s\n" "$uuid" | tee -a $earnapp_file
     fi
     
-    if CONTAINER_ID=$(sudo docker run -d --name earnapp$UNIQUE_ID$i --platform=linux/amd64 $LOGS_PARAM --restart=always $NETWORK_TUN -v $PWD/$earnapp_data_folder/data$i:/etc/earnapp -e EARNAPP_UUID=$uuid fazalfarhan01/earnapp:lite); then
+    if CONTAINER_ID=$(sudo docker run -d --name earnapp$UNIQUE_ID$i $LOGS_PARAM --restart=always $NETWORK_TUN -v $PWD/$earnapp_data_folder/data$i:/etc/earnapp -e EARNAPP_UUID=$uuid fazalfarhan01/earnapp:lite); then
       echo "$CONTAINER_ID" | tee -a $containers_file 
       echo "earnapp$UNIQUE_ID$i" | tee -a $container_names_file 
     else
